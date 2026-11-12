@@ -17,7 +17,7 @@ Back to [[Ease Overview]]. Later ideas go in [[Ideas]].
 - [x] ☰ menu (bottom-right, next to Clear) holds the settings (notes file, template); no title bar
 - [x] Compact layout for a small side window: labels beside fields, buttons pinned at the bottom, Notes box fills the leftover height, fields flow into columns when the window is wide
 
-## On the `test` branch (not live yet)
+## Call documentation (live since 2026-11-12)
 
 - [x] Call documentation: write a sentence once with blanks, e.g. `Pt called to {Reason for Call}. {Next Step}.` (☰ > Edit documentation). On Wrap Up, Ease fills it in, copies it to the clipboard for pasting during ACW, and adds it to the saved call as a `Documentation:` line.
 - [x] ☰ > Copy last documentation, to get the sentence back on the clipboard
