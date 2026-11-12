@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ease - Call Notes</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --text: #1c1f24; --muted: #5d6673;
+    --line: #d5d9e0; --accent: #1f6feb; --accent-text: #ffffff;
+    --ok: #1a7f37; --err: #c62828;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181c; --panel: #1f2228; --text: #e8eaed; --muted: #9aa3af;
+      --line: #363b44; --accent: #4c8dff; --accent-text: #0d1117;
+      --ok: #56d364; --err: #ff7b72;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--panel); color: var(--text);
+    font: 15px/1.45 "Segoe UI", system-ui, sans-serif;
+  }
+  html, body { height: 100%; }
+  /* The app is exactly as tall as the window: fields scroll if they must, buttons stay pinned. */
+  main { height: 100vh; height: 100dvh; display: flex; flex-direction: column; gap: 4px; padding: 6px 8px 8px; }
+  #callForm { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 3px; }
+  .singles { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 6px 16px; }
+  .field { display: grid; grid-template-columns: clamp(84px, 30%, 150px) 1fr; align-items: center; gap: 8px; }
+  .field.multi { display: flex; flex-direction: column; align-items: stretch; gap: 3px; flex: 1 0 96px; }
+  .foot { position: relative; }
+  #menuBtn { width: 34px; padding-left: 0; padding-right: 0; }
+  #menu {
+    position: absolute; bottom: calc(100% + 6px); right: 0; z-index: 5; width: 240px; max-width: 100%; padding: 6px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25);
+  }
+  #menu button { display: block; width: 100%; text-align: left; border-color: transparent; }
+  #menu button:hover { background: var(--bg); }
+  #menu .info { padding: 6px 12px; font-size: 13px; overflow-wrap: anywhere; }
+  #menu .info:first-child { border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  .muted { color: var(--muted); }
+  label { display: block; font-weight: 600; font-size: 14px; line-height: 1.25; overflow-wrap: anywhere; }
+  input[type=text], textarea {
+    width: 100%; min-width: 0; padding: 6px 8px; font: inherit; color: var(--text);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  }
+  textarea { flex: 1; min-height: 60px; resize: none; display: block; }
+  input:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button {
+    font: inherit; padding: 6px 11px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; padding: 6px 18px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  dialog .actions { margin-top: 14px; }
+  .actions .spacer { flex: 1; }
+  #status { font-size: 13px; line-height: 1.4; min-height: 1.4em; margin: 0 3px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #status.err { white-space: normal; }
+  #status.ok { color: var(--ok); }
+  #status.err { color: var(--err); }
+  dialog {
+    width: min(640px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel); color: var(--text); padding: 16px;
+  }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  dialog h2 { font-size: 17px; margin: 0 0 4px; }
+  .trow { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .trow input[type=text] { flex: 1; min-width: 150px; }
+  .trow .chk { font-weight: normal; margin: 0; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .trow button { padding: 6px 9px; }
+</style>
+</head>
+<body>
+<main>
+  <form id="callForm" autocomplete="off"></form>
+  <div class="foot">
+    <p id="status" role="status" aria-live="polite"></p>
+    <div class="actions">
+      <button id="wrapUp" type="button" class="primary" title="Ctrl+Enter">Wrap Up</button>
+      <button id="copy" type="button">Copy</button>
+      <span class="spacer"></span>
+      <button id="clear" type="button">Clear</button>
+      <button id="menuBtn" type="button" aria-label="Menu" title="Menu" aria-haspopup="true" aria-expanded="false">&#9776;</button>
+    </div>
+    <div id="menu" hidden>
+      <div class="muted info" id="fileName"></div>
+      <button id="openFile" type="button">Open notes file</button>
+      <button id="newFile" type="button">New file</button>
+      <button id="editTemplate" type="button">Edit template</button>
+      <div class="muted info">Ctrl+Enter = Wrap Up</div>
+    </div>
+  </div>
+</main>
+
+<dialog id="templateDialog">
+  <h2>Edit template</h2>
+  <p class="muted" style="margin:0">These are the fields you fill in for every call. Tick "Multi-line" for longer notes.</p>
+  <div id="templateRows"></div>
+  <div class="actions">
+    <button id="addField" type="button">+ Add field</button>
+    <span class="spacer"></span>
+    <button id="cancelTemplate" type="button">Cancel</button>
+    <button id="saveTemplate" type="button" class="primary">Save template</button>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  'use strict';
+
+  var TEMPLATE_KEY = 'ease.template';
+  var DRAFT_KEY = 'ease.draft';
+  var NL = '\r\n';
+  var SEPARATOR = '========================================';
+  var DEFAULT_TEMPLATE = [
+    { id: 'f1', label: 'Caller Name', multi: false },
+    { id: 'f2', label: 'Phone', multi: false },
+    { id: 'f3', label: 'Reason for Call', multi: false },
+    { id: 'f4', label: 'Notes', multi: true },
+    { id: 'f5', label: 'Next Step', multi: false }
+  ];
+
+  var $ = function (id) { return document.getElementById(id); };
+  var form = $('callForm');
+  var statusEl = $('status');
+  var canSaveToFile = typeof window.showOpenFilePicker === 'function';
+
+  var template = loadJson(TEMPLATE_KEY, null);
+  if (!Array.isArray(template) || !template.length) template = DEFAULT_TEMPLATE;
+  var draft = loadJson(DRAFT_KEY, {}) || {};
+  var fileHandle = null;
+  var savedCount = 0;
+
+  // ---------- storage helpers ----------
+  function loadJson(key, fallback) {
+    try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+    catch (e) { return fallback; }
+  }
+  function saveJson(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* storage unavailable */ }
+  }
+  function newId() { return 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  // The chosen file is kept in IndexedDB so it is remembered next time.
+  function idb(mode, fn) {
+    return new Promise(function (resolve, reject) {
+      var open = indexedDB.open('ease', 1);
+      open.onupgradeneeded = function () { open.result.createObjectStore('kv'); };
+      open.onerror = function () { reject(open.error); };
+      open.onsuccess = function () {
+        var tx = open.result.transaction('kv', mode);
+        var req = fn(tx.objectStore('kv'));
+        tx.oncomplete = function () { resolve(req && req.result); };
+        tx.onerror = function () { reject(tx.error); };
+      };
+    });
+  }
+
+  // ---------- status ----------
+  function setStatus(msg, kind) {
+    statusEl.textContent = msg || '';
+    statusEl.className = kind || '';
+  }
+
+  // ---------- call form ----------
+  function renderForm() {
+    form.textContent = '';
+    var group = null; // consecutive single-line fields share one grid so they can sit in columns
+    template.forEach(function (f) {
+      var wrap = document.createElement('div');
+      wrap.className = f.multi ? 'field multi' : 'field';
+      var label = document.createElement('label');
+      label.htmlFor = 'in_' + f.id;
+      label.textContent = f.label;
+      var input = document.createElement(f.multi ? 'textarea' : 'input');
+      if (!f.multi) input.type = 'text';
+      input.id = 'in_' + f.id;
+      input.dataset.field = f.id;
+      input.value = draft[f.id] || '';
+      wrap.appendChild(label);
+      wrap.appendChild(input);
+      if (f.multi) {
+        group = null;
+        form.appendChild(wrap);
+      } else {
+        if (!group) {
+          group = document.createElement('div');
+          group.className = 'singles';
+          form.appendChild(group);
+        }
+        group.appendChild(wrap);
+      }
+    });
+  }
+
+  function readValues() {
+    var values = {};
+    form.querySelectorAll('[data-field]').forEach(function (el) { values[el.dataset.field] = el.value; });
+    return values;
+  }
+  function hasContent() {
+    var v = readValues();
+    return Object.keys(v).some(function (k) { return v[k].trim() !== ''; });
+  }
+  function resetForm() {
+    draft = {};
+    saveJson(DRAFT_KEY, draft);
+    form.querySelectorAll('[data-field]').forEach(function (el) { el.value = ''; });
+    var first = form.querySelector('[data-field]');
+    if (first) first.focus();
+  }
+
+  form.addEventListener('input', function () {
+    draft = readValues();
+    saveJson(DRAFT_KEY, draft);
+  });
+  form.addEventListener('submit', function (e) { e.preventDefault(); });
+
+  // ---------- text for the notes file ----------
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function stamp(d) {
+    var h = d.getHours(), ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+      ' ' + h + ':' + pad(d.getMinutes()) + ' ' + ampm;
+  }
+  function buildEntry() {
+    var values = readValues();
+    var lines = [SEPARATOR, 'Call: ' + stamp(new Date())];
+    template.forEach(function (f) {
+      var v = (values[f.id] || '').replace(/\r\n?/g, '\n').replace(/\s+$/, '');
+      if (f.multi) {
+        lines.push(f.label + ':');
+        if (v) lines.push(v.split('\n').join(NL));
+      } else {
+        lines.push(f.label + ': ' + v);
+      }
+    });
+    return lines.join(NL) + NL;
+  }
+
+  // ---------- notes file ----------
+  function showFileName() {
+    var el = $('fileName');
+    if (!canSaveToFile) {
+      el.textContent = 'This browser cannot save to a file. Wrap Up will copy the call so you can paste it into Notepad. Use Chrome or Edge for direct saving.';
+      $('openFile').hidden = true;
+      $('newFile').hidden = true;
+    } else if (fileHandle) {
+      el.textContent = 'Saving to: ' + fileHandle.name;
+    } else {
+      el.textContent = 'No notes file chosen yet.';
+    }
+  }
+
+  var PICK_TYPES = [{ description: 'Text file', accept: { 'text/plain': ['.txt'] } }];
+
+  async function pickFile(create) {
+    try {
+      if (create) {
+        fileHandle = await window.showSaveFilePicker({ suggestedName: 'Call Notes.txt', types: PICK_TYPES });
+      } else {
+        fileHandle = (await window.showOpenFilePicker({ types: PICK_TYPES }))[0];
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return false; // picker was cancelled
+      setStatus('Could not open the file: ' + e.message, 'err');
+      return false;
+    }
+    try { await idb('readwrite', function (s) { return s.put(fileHandle, 'file'); }); } catch (e) { /* not remembered, still usable */ }
+    showFileName();
+    setStatus('Notes file set: ' + fileHandle.name, 'ok');
+    return true;
+  }
+
+  async function ensurePermission() {
+    var opts = { mode: 'readwrite' };
+    if ((await fileHandle.queryPermission(opts)) === 'granted') return true;
+    return (await fileHandle.requestPermission(opts)) === 'granted';
+  }
+
+  function utf16le(text) {
+    var buf = new Uint8Array(text.length * 2);
+    for (var i = 0; i < text.length; i++) {
+      var c = text.charCodeAt(i);
+      buf[i * 2] = c & 0xff;
+      buf[i * 2 + 1] = c >> 8;
+    }
+    return buf;
+  }
+
+  // Adds text to the end of the file. Existing content is kept as it is.
+  async function appendToFile(text) {
+    if (!(await ensurePermission())) throw new Error('access to the notes file was not allowed.');
+    var file = await fileHandle.getFile();
+    var data = (file.size > 0 ? NL : '') + text;
+    var head = new Uint8Array(await file.slice(0, 2).arrayBuffer());
+    if (head[0] === 0xfe && head[1] === 0xff) {
+      throw new Error('this file uses an encoding Ease cannot add to. In Notepad use Save As and choose UTF-8.');
+    }
+    if (head[0] === 0xff && head[1] === 0xfe) data = utf16le(data); // older Notepad "Unicode" files
+    var writable = await fileHandle.createWritable({ keepExistingData: true });
+    try {
+      await writable.write({ type: 'write', position: file.size, data: data });
+      await writable.close();
+    } catch (e) {
+      try { await writable.abort(); } catch (ignore) { /* nothing to undo */ }
+      throw e;
+    }
+  }
+
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; }
+    catch (e) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (ignore) { ok = false; }
+      ta.remove();
+      return ok;
+    }
+  }
+
+  // ---------- actions ----------
+  var busy = false;
+  async function wrapUp() {
+    if (busy || $('templateDialog').open) return;
+    if (!hasContent()) { setStatus('Nothing to save yet. Fill in the call first.', 'err'); return; }
+    busy = true;
+    $('wrapUp').disabled = true;
+    try {
+      var entry = buildEntry();
+      if (!canSaveToFile) {
+        if (!(await copyText(entry))) throw new Error('could not copy to the clipboard.');
+        resetForm();
+        setStatus('Copied. Paste it into Notepad (Ctrl+V). Form cleared for the next call.', 'ok');
+        return;
+      }
+      if (!fileHandle && !(await pickFile(false))) {
+        setStatus('Choose a notes file first. Your call is still here.', 'err');
+        return;
+      }
+      await appendToFile(entry);
+      savedCount++;
+      resetForm();
+      setStatus('Saved to ' + fileHandle.name + ' at ' + stamp(new Date()).split(' ').slice(1).join(' ') +
+        '. Calls saved this session: ' + savedCount + '.', 'ok');
+    } catch (e) {
+      setStatus('Not saved: ' + (e && e.message ? e.message : e) + ' Your call is still here. Use Copy if needed.', 'err');
+    } finally {
+      busy = false;
+      $('wrapUp').disabled = false;
+    }
+  }
+
+  $('wrapUp').addEventListener('click', wrapUp);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); wrapUp(); }
+  });
+  $('copy').addEventListener('click', async function () {
+    if (!hasContent()) { setStatus('Nothing to copy yet.', 'err'); return; }
+    var copied = await copyText(buildEntry());
+    setStatus(copied ? 'Copied. The form was not cleared.' : 'Could not copy to the clipboard.', copied ? 'ok' : 'err');
+  });
+  $('clear').addEventListener('click', function () {
+    if (hasContent() && !confirm('Clear the form without saving this call?')) return;
+    resetForm();
+    setStatus('Form cleared.', '');
+  });
+  $('openFile').addEventListener('click', function () { pickFile(false); });
+  $('newFile').addEventListener('click', function () { pickFile(true); });
+
+  // ---------- menu ----------
+  var menu = $('menu');
+  var menuBtn = $('menuBtn');
+  function setMenu(open) {
+    menu.hidden = !open;
+    menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  menuBtn.addEventListener('click', function () { setMenu(menu.hidden); });
+  menu.addEventListener('click', function (e) { if (e.target.closest('button')) setMenu(false); });
+  document.addEventListener('click', function (e) {
+    if (!menu.hidden && !menu.contains(e.target) && e.target !== menuBtn) setMenu(false);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !menu.hidden) { setMenu(false); menuBtn.focus(); }
+  });
+
+  // ---------- template editor ----------
+  var dialog = $('templateDialog');
+  var rowsEl = $('templateRows');
+  var editing = [];
+
+  function syncEditing() {
+    rowsEl.querySelectorAll('.trow').forEach(function (row, i) {
+      editing[i].label = row.querySelector('input[type=text]').value;
+      editing[i].multi = row.querySelector('input[type=checkbox]').checked;
+    });
+  }
+  function smallButton(text, title, onClick) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = text;
+    b.title = title;
+    b.setAttribute('aria-label', title);
+    b.addEventListener('click', onClick);
+    return b;
+  }
+  function renderRows(focusIndex) {
+    rowsEl.textContent = '';
+    editing.forEach(function (f, i) {
+      var row = document.createElement('div');
+      row.className = 'trow';
+      var name = document.createElement('input');
+      name.type = 'text';
+      name.value = f.label;
+      name.placeholder = 'Field name';
+      name.setAttribute('aria-label', 'Field name');
+      var chk = document.createElement('label');
+      chk.className = 'chk';
+      var box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = !!f.multi;
+      chk.appendChild(box);
+      chk.appendChild(document.createTextNode('Multi-line'));
+      var up = smallButton('↑', 'Move up', function () { move(i, -1); });
+      var down = smallButton('↓', 'Move down', function () { move(i, 1); });
+      var del = smallButton('✕', 'Delete field', function () {
+        syncEditing(); editing.splice(i, 1); renderRows();
+      });
+      up.disabled = i === 0;
+      down.disabled = i === editing.length - 1;
+      row.appendChild(name); row.appendChild(chk); row.appendChild(up); row.appendChild(down); row.appendChild(del);
+      rowsEl.appendChild(row);
+      if (i === focusIndex) name.focus();
+    });
+  }
+  function move(i, dir) {
+    syncEditing();
+    var j = i + dir;
+    if (j < 0 || j >= editing.length) return;
+    var tmp = editing[i]; editing[i] = editing[j]; editing[j] = tmp;
+    renderRows();
+  }
+
+  $('editTemplate').addEventListener('click', function () {
+    editing = template.map(function (f) { return { id: f.id, label: f.label, multi: !!f.multi }; });
+    renderRows();
+    dialog.showModal();
+  });
+  $('addField').addEventListener('click', function () {
+    syncEditing();
+    editing.push({ id: newId(), label: '', multi: false });
+    renderRows(editing.length - 1);
+  });
+  $('cancelTemplate').addEventListener('click', function () { dialog.close(); });
+  $('saveTemplate').addEventListener('click', function () {
+    syncEditing();
+    var cleaned = editing
+      .map(function (f) { return { id: f.id, label: f.label.trim().replace(/:+$/, ''), multi: f.multi }; })
+      .filter(function (f) { return f.label; });
+    if (!cleaned.length) { alert('The template needs at least one field with a name.'); return; }
+    draft = readValues(); // keep what is already typed for fields that remain
+    template = cleaned;
+    saveJson(TEMPLATE_KEY, template);
+    renderForm();
+    draft = readValues();
+    saveJson(DRAFT_KEY, draft);
+    dialog.close();
+    setStatus('Template saved.', 'ok');
+  });
+
+  // ---------- start ----------
+  renderForm();
+  showFileName();
+  if (hasContent()) setStatus('Restored the call you were working on.', '');
+  if (canSaveToFile) {
+    idb('readonly', function (s) { return s.get('file'); })
+      .then(function (h) { if (h && !fileHandle) { fileHandle = h; showFileName(); } })
+      .catch(function () { /* no remembered file */ });
+  }
+  var firstField = form.querySelector('[data-field]');
+  if (firstField) firstField.focus();
+})();
+</script>
+</body>
+</html>
