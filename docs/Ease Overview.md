@@ -12,7 +12,7 @@ Related notes: [[Features]] · [[Decisions]] · [[Ideas]]
 
 ## How to use it
 
-1. Double-click `index.html` (opens in Chrome or Edge).
+1. Open https://ehrin08.github.io/ease-note/ in Chrome or Edge (bookmark it). If the office network blocks that address, double-click a copy of `index.html` instead.
 2. Click the **☰** menu in the bottom-right corner, next to Clear. All settings live there, so the form gets the whole window. The app is meant to sit in a small window beside other work.
 3. In the menu, click **Open notes file** and pick the .txt file that calls should go into, or **New file** to start one. This is done once. The menu also shows which file is in use.
 4. In the menu, click **Edit template** to set up the fields to match the real call template.
@@ -30,6 +30,8 @@ Copy `index.html` to the office computer (USB, email, or shared drive) and open 
 | Thing | Location |
 |---|---|
 | The app | `index.html` in the project folder |
+| Live app | https://ehrin08.github.io/ease-note/ (GitHub Pages, updates on every push to `main`) |
+| Code | https://github.com/ehrin08/ease-note |
 | Project notes | this `docs` folder (open as an Obsidian vault) |
 | Template and unsaved draft | the browser's storage on that computer |
 | Saved calls | the .txt file chosen in the app |
