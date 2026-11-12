@@ -74,6 +74,7 @@
   #docExample.warn { color: var(--err); }
   .trow { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
   .trow input[type=text] { flex: 1; min-width: 150px; }
+  .trow input.start { flex: 1 1 100%; font-size: 13px; padding: 4px 8px; margin-bottom: 4px; }
   .trow .chk { font-weight: normal; margin: 0; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
   .trow button { padding: 6px 9px; }
 </style>
@@ -142,7 +143,7 @@
     { id: 'f2', label: 'TPC', multi: false },
     { id: 'f3', label: 'Name', multi: false },
     { id: 'f4', label: 'Call Details', multi: true },
-    { id: 'f5', label: 'Case Notes (documentation)', multi: true },
+    { id: 'f5', label: 'Case Notes (documentation)', multi: true, start: 'Pt called to ' },
     { id: 'f6', label: 'Case Number (Documentation No.)', multi: false }
   ];
 
@@ -155,6 +156,13 @@
 
   var template = loadJson(TEMPLATE_KEY, null);
   if (!Array.isArray(template) || !template.length) template = DEFAULT_TEMPLATE;
+  // Templates saved before starter text existed: give unchanged default fields their starter text.
+  template.forEach(function (f) {
+    if (typeof f.start === 'string') return;
+    var d = null;
+    DEFAULT_TEMPLATE.forEach(function (x) { if (x.id === f.id && x.label === f.label) d = x; });
+    f.start = (d && d.start) || '';
+  });
   var draft = loadJson(DRAFT_KEY, {}) || {};
   // Never set: copy the Case Notes field. Saved as empty: the feature is off.
   var docSentence = loadJson(DOC_KEY, null);
@@ -208,7 +216,14 @@
       if (!f.multi) input.type = 'text';
       input.id = 'in_' + f.id;
       input.dataset.field = f.id;
-      input.value = draft[f.id] || '';
+      input.value = Object.prototype.hasOwnProperty.call(draft, f.id) ? draft[f.id] : (f.start || '');
+      if (f.start) {
+        // Untouched starter text: put the cursor after it, ready to continue the sentence.
+        input.addEventListener('focus', function () {
+          if (input.value !== f.start) return;
+          setTimeout(function () { input.setSelectionRange(input.value.length, input.value.length); }, 0);
+        });
+      }
       wrap.appendChild(label);
       wrap.appendChild(input);
       if (f.multi) {
@@ -230,14 +245,22 @@
     form.querySelectorAll('[data-field]').forEach(function (el) { values[el.dataset.field] = el.value; });
     return values;
   }
+  // What the user actually typed in a field, on one or more lines. Untouched starter text counts as empty.
+  function typed(f, values) {
+    var v = (values[f.id] || '').replace(/\r\n?/g, '\n').replace(/\s+$/, '');
+    return v.trim() === (f.start || '').trim() ? '' : v;
+  }
   function hasContent() {
     var v = readValues();
-    return Object.keys(v).some(function (k) { return v[k].trim() !== ''; });
+    return template.some(function (f) { return typed(f, v).trim() !== ''; });
   }
   function resetForm() {
     draft = {};
     saveJson(DRAFT_KEY, draft);
-    form.querySelectorAll('[data-field]').forEach(function (el) { el.value = ''; });
+    template.forEach(function (f) {
+      var el = $('in_' + f.id);
+      if (el) el.value = f.start || '';
+    });
     var first = form.querySelector('[data-field]');
     if (first) first.focus();
   }
@@ -266,7 +289,7 @@
       var field = null;
       template.forEach(function (f) { if (!field && f.label.toLowerCase() === key) field = f; });
       if (!field) { unknown.push(name.trim()); return ''; }
-      var v = (values[field.id] || '').replace(/\s+/g, ' ').trim();
+      var v = typed(field, values).replace(/\s+/g, ' ').trim();
       return v || (sample ? '[' + field.label + ']' : '');
     });
     // Tidy what empty fields leave behind: double spaces, " ." and "..".
@@ -285,7 +308,7 @@
     var values = readValues();
     var lines = [SEPARATOR, 'Call: ' + stamp(new Date())];
     template.forEach(function (f) {
-      var v = (values[f.id] || '').replace(/\r\n?/g, '\n').replace(/\s+$/, '');
+      var v = typed(f, values);
       if (f.multi) {
         lines.push(f.label + ':');
         if (v) lines.push(v.split('\n').join(NL));
@@ -465,6 +488,7 @@
   function syncEditing() {
     rowsEl.querySelectorAll('.trow').forEach(function (row, i) {
       editing[i].label = row.querySelector('input[type=text]').value;
+      editing[i].start = row.querySelector('input.start').value;
       editing[i].multi = row.querySelector('input[type=checkbox]').checked;
     });
   }
@@ -501,7 +525,15 @@
       });
       up.disabled = i === 0;
       down.disabled = i === editing.length - 1;
+      var start = document.createElement('input');
+      start.type = 'text';
+      start.className = 'start';
+      start.value = f.start || '';
+      start.placeholder = 'Starter text (optional)';
+      start.title = 'Text this field starts with on every new call';
+      start.setAttribute('aria-label', 'Starter text for this field');
       row.appendChild(name); row.appendChild(chk); row.appendChild(up); row.appendChild(down); row.appendChild(del);
+      row.appendChild(start);
       rowsEl.appendChild(row);
       if (i === focusIndex) name.focus();
     });
@@ -515,24 +547,24 @@
   }
 
   $('editTemplate').addEventListener('click', function () {
-    editing = template.map(function (f) { return { id: f.id, label: f.label, multi: !!f.multi }; });
+    editing = template.map(function (f) { return { id: f.id, label: f.label, multi: !!f.multi, start: f.start || '' }; });
     renderRows();
     dialog.showModal();
   });
   $('addField').addEventListener('click', function () {
     syncEditing();
-    editing.push({ id: newId(), label: '', multi: false });
+    editing.push({ id: newId(), label: '', multi: false, start: '' });
     renderRows(editing.length - 1);
   });
   $('resetTemplate').addEventListener('click', function () {
-    editing = DEFAULT_TEMPLATE.map(function (f) { return { id: f.id, label: f.label, multi: f.multi }; });
+    editing = DEFAULT_TEMPLATE.map(function (f) { return { id: f.id, label: f.label, multi: f.multi, start: f.start || '' }; });
     renderRows();
   });
   $('cancelTemplate').addEventListener('click', function () { dialog.close(); });
   $('saveTemplate').addEventListener('click', function () {
     syncEditing();
     var cleaned = editing
-      .map(function (f) { return { id: f.id, label: f.label.replace(/[{}]/g, '').trim().replace(/:+$/, ''), multi: f.multi }; })
+      .map(function (f) { return { id: f.id, label: f.label.replace(/[{}]/g, '').trim().replace(/:+$/, ''), multi: f.multi, start: f.start || '' }; })
       .filter(function (f) { return f.label; });
     if (!cleaned.length) { alert('The template needs at least one field with a name.'); return; }
     // Renamed fields: keep the documentation sentence pointing at them.
@@ -547,6 +579,7 @@
       saveJson(DOC_KEY, docSentence);
     }
     draft = readValues(); // keep what is already typed for fields that remain
+    template.forEach(function (f) { if (typed(f, draft) === '') delete draft[f.id]; }); // untouched fields take the new starter text
     template = cleaned;
     saveJson(TEMPLATE_KEY, template);
     renderForm();

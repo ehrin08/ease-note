@@ -24,6 +24,7 @@ Back to [[Ease Overview]]. Later ideas go in [[Ideas]].
 - Blank fields leave nothing behind; renaming a field updates the sentence; an empty sentence turns the feature off.
 
 - [x] By default the documentation is whatever is typed in Case Notes (documentation): Wrap Up copies it for pasting. It is joined into one line, and no extra `Documentation:` line is saved since the field is already in the call.
+- [x] Starter text: a field can begin with set text on every new call. Case Notes starts with "Pt called to ". Set per field in Edit template. Untouched starter text counts as empty: it is not saved or copied.
 - [x] Default fields are the real call template: Humana ID, TPC, Name, Call Details (multi-line), Case Notes (documentation) (multi-line), Case Number (Documentation No.)
 - [x] Edit template > Reset to default puts those fields back
 
