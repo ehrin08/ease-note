@@ -19,6 +19,8 @@ Related notes: [[Features]] · [[Decisions]] · [[Ideas]]
 5. During a call, type in the fields. Tab moves to the next field.
 6. Click **Wrap Up** (or press Ctrl+Enter). The call is saved and the form resets.
 
+**Call documentation (on the `test` branch):** in the menu, **Edit documentation** holds a sentence with blanks. Wrap Up fills it in and copies it, so in ACW it only needs pasting (Ctrl+V). See [[Features]].
+
 After the browser is restarted, the first Wrap Up asks to allow access to the file again. Click allow.
 
 ## Moving it to the office PC

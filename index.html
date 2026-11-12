@@ -67,6 +67,11 @@
   }
   dialog::backdrop { background: rgba(0,0,0,.45); }
   dialog h2 { font-size: 17px; margin: 0 0 4px; }
+  dialog textarea { min-height: 72px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .chips button { padding: 3px 8px; font-size: 13px; }
+  #docExample { font-size: 13px; margin: 0; min-height: 1.45em; overflow-wrap: anywhere; }
+  #docExample.warn { color: var(--err); }
   .trow { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
   .trow input[type=text] { flex: 1; min-width: 150px; }
   .trow .chk { font-weight: normal; margin: 0; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
@@ -90,6 +95,8 @@
       <button id="openFile" type="button">Open notes file</button>
       <button id="newFile" type="button">New file</button>
       <button id="editTemplate" type="button">Edit template</button>
+      <button id="editDoc" type="button">Edit documentation</button>
+      <button id="copyLastDoc" type="button">Copy last documentation</button>
       <div class="muted info">Ctrl+Enter = Wrap Up</div>
     </div>
   </div>
@@ -107,12 +114,26 @@
   </div>
 </dialog>
 
+<dialog id="docDialog">
+  <h2>Edit documentation</h2>
+  <p class="muted" style="margin:0 0 8px">Write the sentence once. Click a field below to insert it. On Wrap Up, Ease fills it in and copies it for you to paste.</p>
+  <textarea id="docText" rows="3" aria-label="Documentation sentence" placeholder="Pt called to {Reason for Call}. {Next Step}."></textarea>
+  <div id="docChips" class="chips"></div>
+  <p id="docExample" class="muted"></p>
+  <div class="actions">
+    <span class="spacer"></span>
+    <button id="cancelDoc" type="button">Cancel</button>
+    <button id="saveDoc" type="button" class="primary">Save</button>
+  </div>
+</dialog>
+
 <script>
 (function () {
   'use strict';
 
   var TEMPLATE_KEY = 'ease.template';
   var DRAFT_KEY = 'ease.draft';
+  var DOC_KEY = 'ease.doc';
   var NL = '\r\n';
   var SEPARATOR = '========================================';
   var DEFAULT_TEMPLATE = [
@@ -131,6 +152,9 @@
   var template = loadJson(TEMPLATE_KEY, null);
   if (!Array.isArray(template) || !template.length) template = DEFAULT_TEMPLATE;
   var draft = loadJson(DRAFT_KEY, {}) || {};
+  var docSentence = loadJson(DOC_KEY, '');
+  if (typeof docSentence !== 'string') docSentence = '';
+  var lastDoc = '';
   var fileHandle = null;
   var savedCount = 0;
 
@@ -227,7 +251,32 @@
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
       ' ' + h + ':' + pad(d.getMinutes()) + ' ' + ampm;
   }
-  function buildEntry() {
+  // ---------- documentation sentence ----------
+  // Replaces {Field Name} in the sentence with what was typed in that field.
+  // With sample = true, empty fields show as [Field Name] (used for the example in the editor).
+  function fillDoc(sentence, values, sample) {
+    var unknown = [];
+    var text = sentence.replace(/\{([^{}]+)\}/g, function (m, name) {
+      var key = name.trim().toLowerCase();
+      var field = null;
+      template.forEach(function (f) { if (!field && f.label.toLowerCase() === key) field = f; });
+      if (!field) { unknown.push(name.trim()); return ''; }
+      var v = (values[field.id] || '').replace(/\s+/g, ' ').trim();
+      return v || (sample ? '[' + field.label + ']' : '');
+    });
+    // Tidy what empty fields leave behind: double spaces, " ." and "..".
+    text = text.replace(/\s+/g, ' ')
+      .replace(/\s+([.,;:!?])/g, '$1')
+      .replace(/([.,;:!?])[.,;:!?]+/g, '$1')
+      .replace(/^[\s.,;:!?]+/, '')
+      .trim();
+    return { text: text, unknown: unknown };
+  }
+  function currentDoc() {
+    return docSentence ? fillDoc(docSentence, readValues(), false).text : '';
+  }
+
+  function buildEntry(doc) {
     var values = readValues();
     var lines = [SEPARATOR, 'Call: ' + stamp(new Date())];
     template.forEach(function (f) {
@@ -239,6 +288,7 @@
         lines.push(f.label + ': ' + v);
       }
     });
+    if (doc) lines.push('Documentation: ' + doc);
     return lines.join(NL) + NL;
   }
 
@@ -329,12 +379,14 @@
   // ---------- actions ----------
   var busy = false;
   async function wrapUp() {
-    if (busy || $('templateDialog').open) return;
+    if (busy || $('templateDialog').open || $('docDialog').open) return;
     if (!hasContent()) { setStatus('Nothing to save yet. Fill in the call first.', 'err'); return; }
     busy = true;
     $('wrapUp').disabled = true;
     try {
-      var entry = buildEntry();
+      var doc = currentDoc();
+      var entry = buildEntry(doc);
+      if (doc) lastDoc = doc;
       if (!canSaveToFile) {
         if (!(await copyText(entry))) throw new Error('could not copy to the clipboard.');
         resetForm();
@@ -345,11 +397,19 @@
         setStatus('Choose a notes file first. Your call is still here.', 'err');
         return;
       }
+      // Copy the documentation first, while the click still counts, so it is ready to paste.
+      var docCopied = doc ? await copyText(doc) : false;
       await appendToFile(entry);
       savedCount++;
       resetForm();
-      setStatus('Saved to ' + fileHandle.name + ' at ' + stamp(new Date()).split(' ').slice(1).join(' ') +
-        '. Calls saved this session: ' + savedCount + '.', 'ok');
+      var time = stamp(new Date()).split(' ').slice(1).join(' ');
+      if (!doc) {
+        setStatus('Saved to ' + fileHandle.name + ' at ' + time + '. Calls saved this session: ' + savedCount + '.', 'ok');
+      } else if (docCopied) {
+        setStatus('Saved ' + time + '. Documentation copied, paste with Ctrl+V.', 'ok');
+      } else {
+        setStatus('Saved ' + time + ', but the documentation was not copied. Use the menu: Copy last documentation.', 'err');
+      }
     } catch (e) {
       setStatus('Not saved: ' + (e && e.message ? e.message : e) + ' Your call is still here. Use Copy if needed.', 'err');
     } finally {
@@ -364,7 +424,7 @@
   });
   $('copy').addEventListener('click', async function () {
     if (!hasContent()) { setStatus('Nothing to copy yet.', 'err'); return; }
-    var copied = await copyText(buildEntry());
+    var copied = await copyText(buildEntry(currentDoc()));
     setStatus(copied ? 'Copied. The form was not cleared.' : 'Could not copy to the clipboard.', copied ? 'ok' : 'err');
   });
   $('clear').addEventListener('click', function () {
@@ -462,9 +522,20 @@
   $('saveTemplate').addEventListener('click', function () {
     syncEditing();
     var cleaned = editing
-      .map(function (f) { return { id: f.id, label: f.label.trim().replace(/:+$/, ''), multi: f.multi }; })
+      .map(function (f) { return { id: f.id, label: f.label.replace(/[{}]/g, '').trim().replace(/:+$/, ''), multi: f.multi }; })
       .filter(function (f) { return f.label; });
     if (!cleaned.length) { alert('The template needs at least one field with a name.'); return; }
+    // Renamed fields: keep the documentation sentence pointing at them.
+    if (docSentence) {
+      cleaned.forEach(function (f) {
+        var old = null;
+        template.forEach(function (t) { if (t.id === f.id) old = t; });
+        if (!old || old.label === f.label) return;
+        var re = new RegExp('\\{\\s*' + old.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\}', 'gi');
+        docSentence = docSentence.replace(re, function () { return '{' + f.label + '}'; });
+      });
+      saveJson(DOC_KEY, docSentence);
+    }
     draft = readValues(); // keep what is already typed for fields that remain
     template = cleaned;
     saveJson(TEMPLATE_KEY, template);
@@ -472,7 +543,60 @@
     draft = readValues();
     saveJson(DRAFT_KEY, draft);
     dialog.close();
-    setStatus('Template saved.', 'ok');
+    var missing = docSentence ? fillDoc(docSentence, {}, false).unknown : [];
+    if (missing.length) {
+      setStatus('Template saved. The documentation sentence still uses a removed field: ' + missing.join(', ') +
+        '. Fix it in the menu: Edit documentation.', 'err');
+    } else {
+      setStatus('Template saved.', 'ok');
+    }
+  });
+
+  // ---------- documentation editor ----------
+  var docDialog = $('docDialog');
+  var docText = $('docText');
+  var docExample = $('docExample');
+
+  function renderDocExample() {
+    var sentence = docText.value.trim();
+    var result = fillDoc(sentence, readValues(), true);
+    docExample.className = result.unknown.length ? 'warn' : 'muted';
+    if (!sentence) docExample.textContent = 'Empty: no documentation is written.';
+    else if (result.unknown.length) docExample.textContent = 'No field named: ' + result.unknown.join(', ');
+    else docExample.textContent = 'Example: ' + result.text;
+  }
+  docText.addEventListener('input', renderDocExample);
+
+  $('editDoc').addEventListener('click', function () {
+    docText.value = docSentence;
+    var chips = $('docChips');
+    chips.textContent = '';
+    template.forEach(function (f) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = f.label;
+      b.title = 'Insert ' + f.label;
+      b.addEventListener('click', function () {
+        docText.setRangeText('{' + f.label + '}', docText.selectionStart, docText.selectionEnd, 'end');
+        docText.focus();
+        renderDocExample();
+      });
+      chips.appendChild(b);
+    });
+    renderDocExample();
+    docDialog.showModal();
+  });
+  $('cancelDoc').addEventListener('click', function () { docDialog.close(); });
+  $('saveDoc').addEventListener('click', function () {
+    docSentence = docText.value.replace(/\s+/g, ' ').trim();
+    saveJson(DOC_KEY, docSentence);
+    docDialog.close();
+    setStatus(docSentence ? 'Documentation sentence saved.' : 'Documentation turned off.', 'ok');
+  });
+  $('copyLastDoc').addEventListener('click', async function () {
+    if (!lastDoc) { setStatus('No documentation yet. It is written when you Wrap Up a call.', ''); return; }
+    var ok = await copyText(lastDoc);
+    setStatus(ok ? 'Last documentation copied, paste with Ctrl+V.' : 'Could not copy to the clipboard.', ok ? 'ok' : 'err');
   });
 
   // ---------- start ----------
