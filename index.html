@@ -146,6 +146,8 @@
     { id: 'f6', label: 'Case Number (Documentation No.)', multi: false }
   ];
 
+  var DEFAULT_DOC = '{Case Notes (documentation)}';
+
   var $ = function (id) { return document.getElementById(id); };
   var form = $('callForm');
   var statusEl = $('status');
@@ -154,8 +156,9 @@
   var template = loadJson(TEMPLATE_KEY, null);
   if (!Array.isArray(template) || !template.length) template = DEFAULT_TEMPLATE;
   var draft = loadJson(DRAFT_KEY, {}) || {};
-  var docSentence = loadJson(DOC_KEY, '');
-  if (typeof docSentence !== 'string') docSentence = '';
+  // Never set: copy the Case Notes field. Saved as empty: the feature is off.
+  var docSentence = loadJson(DOC_KEY, null);
+  if (typeof docSentence !== 'string') docSentence = DEFAULT_DOC;
   var lastDoc = '';
   var fileHandle = null;
   var savedCount = 0;
@@ -290,7 +293,8 @@
         lines.push(f.label + ': ' + v);
       }
     });
-    if (doc) lines.push('Documentation: ' + doc);
+    // A sentence that is just one field would only repeat that field, so it gets no extra line.
+    if (doc && !/^\{[^{}]+\}$/.test(docSentence)) lines.push('Documentation: ' + doc);
     return lines.join(NL) + NL;
   }
 
