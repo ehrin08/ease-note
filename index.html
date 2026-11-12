@@ -108,6 +108,7 @@
   <div id="templateRows"></div>
   <div class="actions">
     <button id="addField" type="button">+ Add field</button>
+    <button id="resetTemplate" type="button" title="Put back the built-in fields. Nothing changes until you save.">Reset to default</button>
     <span class="spacer"></span>
     <button id="cancelTemplate" type="button">Cancel</button>
     <button id="saveTemplate" type="button" class="primary">Save template</button>
@@ -117,7 +118,7 @@
 <dialog id="docDialog">
   <h2>Edit documentation</h2>
   <p class="muted" style="margin:0 0 8px">Write the sentence once. Click a field below to insert it. On Wrap Up, Ease fills it in and copies it for you to paste.</p>
-  <textarea id="docText" rows="3" aria-label="Documentation sentence" placeholder="Pt called to {Reason for Call}. {Next Step}."></textarea>
+  <textarea id="docText" rows="3" aria-label="Documentation sentence" placeholder="Pt called to {Call Details}."></textarea>
   <div id="docChips" class="chips"></div>
   <p id="docExample" class="muted"></p>
   <div class="actions">
@@ -137,11 +138,12 @@
   var NL = '\r\n';
   var SEPARATOR = '========================================';
   var DEFAULT_TEMPLATE = [
-    { id: 'f1', label: 'Caller Name', multi: false },
-    { id: 'f2', label: 'Phone', multi: false },
-    { id: 'f3', label: 'Reason for Call', multi: false },
-    { id: 'f4', label: 'Notes', multi: true },
-    { id: 'f5', label: 'Next Step', multi: false }
+    { id: 'f1', label: 'Humana ID', multi: false },
+    { id: 'f2', label: 'TPC', multi: false },
+    { id: 'f3', label: 'Name', multi: false },
+    { id: 'f4', label: 'Call Details', multi: true },
+    { id: 'f5', label: 'Case Notes (documentation)', multi: true },
+    { id: 'f6', label: 'Case Number (Documentation No.)', multi: false }
   ];
 
   var $ = function (id) { return document.getElementById(id); };
@@ -517,6 +519,10 @@
     syncEditing();
     editing.push({ id: newId(), label: '', multi: false });
     renderRows(editing.length - 1);
+  });
+  $('resetTemplate').addEventListener('click', function () {
+    editing = DEFAULT_TEMPLATE.map(function (f) { return { id: f.id, label: f.label, multi: f.multi }; });
+    renderRows();
   });
   $('cancelTemplate').addEventListener('click', function () { dialog.close(); });
   $('saveTemplate').addEventListener('click', function () {

@@ -23,6 +23,9 @@ Back to [[Ease Overview]]. Later ideas go in [[Ideas]].
 - [x] ☰ > Copy last documentation, to get the sentence back on the clipboard
 - Blank fields leave nothing behind; renaming a field updates the sentence; an empty sentence turns the feature off.
 
+- [x] Default fields are the real call template: Humana ID, TPC, Name, Call Details (multi-line), Case Notes (documentation) (multi-line), Case Number (Documentation No.)
+- [x] Edit template > Reset to default puts those fields back
+
 ## Format of a saved call
 
 ```
