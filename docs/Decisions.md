@@ -22,6 +22,10 @@ Writing to a file on disk needs the File System Access API, which only Chrome an
 
 The code already lives on GitHub and the app is one static file, so Pages hosts it for free with no upkeep. HTTPS keeps file saving working. Notes and the template never leave the computer; only the empty app is public. The template is stored per address, so it is set up once on the hosted version.
 
+## Captions stay on the computer (2026-11-15)
+
+Windows Live Captions sometimes fails, so Ease captions the call tab itself with the browser's built-in speech recognition. Calls contain patient details, so recognition is on-device only: if the computer cannot do it, captions are simply off. There is no cloud fallback, and caption text is never saved. Caller only, not the microphone.
+
 ## Kept out on purpose
 
 Search, history view, multiple templates, accounts, syncing. Simple first. See [[Ideas]].

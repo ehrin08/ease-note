@@ -28,6 +28,13 @@ Back to [[Ease Overview]]. Later ideas go in [[Ideas]].
 - [x] Default fields are the real call template: Humana ID, TPC, Name, Call Details (multi-line), Case Notes (documentation) (multi-line), Case Number (Documentation No.)
 - [x] Edit template > Reset to default puts those fields back
 
+## Live captions (added 2026-11-15)
+
+- [x] ☰ > Live captions: pick the call's browser tab and tick "Also share tab audio". What the caller says appears in a small box above the form.
+- [x] Speech is recognized on the computer only. Nothing is sent out, and caption text is never saved to the notes file.
+- [x] Captions clear on Wrap Up / Clear and keep running for the next call. ☰ > Stop live captions (or Chrome's "Stop sharing") turns them off.
+- The first use downloads a speech pack once; choose Live captions again when it says it is ready.
+
 ## Format of a saved call
 
 ```
@@ -46,3 +53,4 @@ Next Step: Follow up Friday
 - Saving straight to a file works in Chrome and Edge only. Other browsers get Copy.
 - If the .txt is open in Notepad, reopen it to see newly added calls.
 - Template and draft are stored per browser, per computer.
+- Live captions need a recent Chrome (about version 139 or later) that can recognize speech on the computer. The call tab has to be picked again each time captions are started. English (US) only.

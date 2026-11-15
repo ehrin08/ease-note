@@ -26,6 +26,10 @@
   /* The app is exactly as tall as the window: fields scroll if they must, buttons stay pinned. */
   main { height: 100vh; height: 100dvh; display: flex; flex-direction: column; gap: 4px; padding: 6px 8px 8px; }
   #callForm { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 3px; }
+  #captions {
+    flex: none; height: 5.2em; overflow-y: auto; padding: 5px 8px; margin: 0 3px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 6px; overflow-wrap: anywhere;
+  }
   .singles { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 6px 16px; }
   .field { display: grid; grid-template-columns: clamp(84px, 30%, 150px) 1fr; align-items: center; gap: 8px; }
   .field.multi { display: flex; flex-direction: column; align-items: stretch; gap: 3px; flex: 1 0 96px; }
@@ -81,6 +85,7 @@
 </head>
 <body>
 <main>
+  <div id="captions" hidden aria-label="Live captions"><span id="capFinal"></span><span id="capInterim" class="muted"></span></div>
   <form id="callForm" autocomplete="off"></form>
   <div class="foot">
     <p id="status" role="status" aria-live="polite"></p>
@@ -98,6 +103,7 @@
       <button id="editTemplate" type="button">Edit template</button>
       <button id="editDoc" type="button">Edit documentation</button>
       <button id="copyLastDoc" type="button">Copy last documentation</button>
+      <button id="captionsBtn" type="button">Live captions</button>
       <div class="muted info">Ctrl+Enter = Wrap Up</div>
     </div>
   </div>
@@ -263,6 +269,7 @@
     });
     var first = form.querySelector('[data-field]');
     if (first) first.focus();
+    showCaption('', ''); // each call starts with clean captions
   }
 
   form.addEventListener('input', function () {
@@ -640,6 +647,115 @@
     if (!lastDoc) { setStatus('No documentation yet. It is written when you Wrap Up a call.', ''); return; }
     var ok = await copyText(lastDoc);
     setStatus(ok ? 'Last documentation copied, paste with Ctrl+V.' : 'Could not copy to the clipboard.', ok ? 'ok' : 'err');
+  });
+
+  // ---------- live captions ----------
+  // Captions the caller from the call's browser tab. Speech is recognized on this computer only
+  // (processLocally), never by a cloud service, and the text is never saved anywhere.
+  var CAPTION_LANG = 'en-US';
+  var CAPTION_KEEP = 600; // characters of caption kept on screen
+  var capBox = $('captions');
+  var capStream = null;
+  var capTrack = null;
+  var capRec = null;
+  var capText = '';
+  var capStarting = false;
+
+  function showCaption(finalText, interim) {
+    capText = finalText;
+    $('capFinal').textContent = finalText;
+    $('capInterim').textContent = interim;
+    capBox.scrollTop = capBox.scrollHeight;
+  }
+  function stopCaptions(msg, kind) {
+    var rec = capRec, stream = capStream;
+    capRec = null; capStream = null; capTrack = null;
+    if (rec) { try { rec.abort(); } catch (e) { /* already stopped */ } }
+    if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+    capBox.hidden = true;
+    showCaption('', '');
+    $('captionsBtn').textContent = 'Live captions';
+    if (msg) setStatus(msg, kind || '');
+  }
+  function listen() {
+    var SR = window.SpeechRecognition;
+    var rec = new SR();
+    rec.lang = CAPTION_LANG;
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.processLocally = true;
+    rec.onresult = function (e) {
+      var done = capText, interim = '';
+      for (var i = e.resultIndex; i < e.results.length; i++) {
+        var t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) done = (done + ' ' + t.trim()).trim();
+        else interim += t;
+      }
+      if (done.length > CAPTION_KEEP) done = done.slice(-CAPTION_KEEP).replace(/^\S*\s/, '');
+      showCaption(done, interim ? ' ' + interim.trim() : '');
+    };
+    rec.onerror = function (e) {
+      if (rec !== capRec || e.error === 'no-speech' || e.error === 'aborted') return;
+      stopCaptions('Live captions stopped: ' + e.error + '.', 'err');
+    };
+    // Recognition ends by itself after a silence: keep going while the call tab is still shared.
+    rec.onend = function () {
+      if (rec !== capRec) return;
+      if (!capTrack || capTrack.readyState !== 'live') { stopCaptions('Live captions stopped.', ''); return; }
+      try { listen(); } catch (err) { stopCaptions('Live captions stopped: ' + err.message, 'err'); }
+    };
+    capRec = rec;
+    rec.start(capTrack);
+  }
+  async function startCaptions() {
+    var SR = window.SpeechRecognition;
+    if (!SR || typeof SR.available !== 'function' || !navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      setStatus('Live captions need a newer Chrome on this computer.', 'err');
+      return;
+    }
+    var opts = { langs: [CAPTION_LANG], processLocally: true };
+    var state;
+    try { state = await SR.available(opts); } catch (e) { state = 'unavailable'; }
+    if (state === 'downloadable' || state === 'downloading') {
+      setStatus('Downloading the speech pack (one time). This can take a few minutes...', '');
+      var ok = false;
+      try { ok = await SR.install(opts); } catch (e) { ok = false; }
+      if (!ok) { setStatus('The speech pack could not be downloaded. Live captions are not available.', 'err'); return; }
+      // The download can outlast the click, and choosing a tab needs a fresh click.
+      setStatus('Speech pack ready. Choose Live captions again to start.', 'ok');
+      return;
+    }
+    if (state !== 'available') {
+      setStatus('This computer cannot caption on its own, so live captions are off.', 'err');
+      return;
+    }
+    var stream;
+    try { stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }); }
+    catch (e) {
+      if (e && e.name !== 'NotAllowedError' && e.name !== 'AbortError') setStatus('Could not share the call tab: ' + e.message, 'err');
+      return; // picker was cancelled
+    }
+    var track = stream.getAudioTracks()[0];
+    if (!track) {
+      stream.getTracks().forEach(function (t) { t.stop(); });
+      setStatus('No sound was shared. Pick the call tab and tick "Also share tab audio".', 'err');
+      return;
+    }
+    stream.getVideoTracks().forEach(function (t) { t.stop(); }); // only the sound is needed
+    capStream = stream;
+    capTrack = track;
+    track.addEventListener('ended', function () { if (capTrack === track) stopCaptions('Live captions stopped.', ''); });
+    capBox.hidden = false;
+    $('captionsBtn').textContent = 'Stop live captions';
+    try { listen(); }
+    catch (e) { stopCaptions('Live captions could not start: ' + e.message, 'err'); return; }
+    setStatus('Live captions on. They stay on this computer and are not saved.', 'ok');
+  }
+  $('captionsBtn').addEventListener('click', async function () {
+    if (capStarting) return;
+    if (capTrack) { stopCaptions('Live captions off.', ''); return; }
+    capStarting = true;
+    try { await startCaptions(); } finally { capStarting = false; }
   });
 
   // ---------- start ----------
